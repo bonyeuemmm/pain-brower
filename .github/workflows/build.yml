@@ -22,14 +22,20 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.22.3'
           channel: 'stable'
 
-      - name: Create Flutter project structure
+      - name: Create Flutter project
         run: |
           flutter create --project-name yt_music_purple .
-          # Giữ lại file main.dart và pubspec.yaml của mình
+          # Giữ lại code của mình
           git checkout -- lib/main.dart pubspec.yaml || true
+
+      - name: Fix Kotlin version
+        run: |
+          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.22"/' android/build.gradle || true
+          sed -i 's/kotlin_version = .*/kotlin_version = "1.9.22"/' android/settings.gradle || true
+          sed -i 's/kotlin-stdlib.*/kotlin-stdlib:1.9.22"/' android/app/build.gradle || true
 
       - name: Get dependencies
         run: flutter pub get
