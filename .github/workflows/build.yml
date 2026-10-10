@@ -25,6 +25,12 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
+      - name: Create Flutter project structure
+        run: |
+          flutter create --project-name yt_music_purple .
+          # Giữ lại file main.dart và pubspec.yaml của mình
+          git checkout -- lib/main.dart pubspec.yaml || true
+
       - name: Get dependencies
         run: flutter pub get
 
