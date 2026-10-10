@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -40,10 +40,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TextEditingController _linkController = TextEditingController();
-  YoutubePlayerController? _controller;
+  WebViewController? _webController;
   List<String> _history = [];
   bool _isLoading = false;
-  String? _errorMessage;
+  String? _currentVideoId;
 
   @override
   void initState() {
@@ -67,67 +67,65 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
-  String? _extractVideoId(String url) {
-    // Làm sạch link
+  String? _getVideoId(String url) {
     url = url.trim();
 
-    // Nếu người dùng chỉ dán ID
-    if (url.length == 11 && !url.contains('/') && !url.contains('?')) {
+    // Nếu chỉ dán ID 11 ký tự
+    if (RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(url)) {
       return url;
     }
 
-    return YoutubePlayerController.convertUrlToId(url);
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+
+    // youtu.be/xxxxxx
+    if (uri.host.contains('youtu.be')) {
+      return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+    }
+
+    // youtube.com/watch?v=xxxxxx
+    if (uri.queryParameters.containsKey('v')) {
+      return uri.queryParameters['v'];
+    }
+
+    // youtube.com/embed/xxxxxx
+    if (uri.pathSegments.contains('embed') && uri.pathSegments.length > 1) {
+      return uri.pathSegments[1];
+    }
+
+    return null;
   }
 
   void _play(String url) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    final videoId = _extractVideoId(url);
+    final videoId = _getVideoId(url);
 
     if (videoId == null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Link không hợp lệ. Hãy dán đầy đủ link YouTube';
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Link không hợp lệ. Hãy dán đầy đủ link YouTube'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+      _currentVideoId = videoId;
+    });
+
     await _saveHistory(url);
 
-    try {
-      await _controller?.close();
+    final embedUrl = 'https://www.youtube.com/embed/$videoId?autoplay=1&rel=0&modestbranding=1';
 
-      _controller = YoutubePlayerController.fromVideoId(
-        videoId: videoId,
-        autoPlay: true,
-        params: const YoutubePlayerParams(
-          showControls: true,
-          showFullscreenButton: true,
-          mute: false,
-          loop: false,
-          strictRelatedVideos: false,
-        ),
-      );
+    _webController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF0B0715))
+      ..loadRequest(Uri.parse(embedUrl));
 
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Không thể phát video này';
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.close();
-    _linkController.dispose();
-    super.dispose();
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   @override
@@ -249,25 +247,15 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // Thông báo lỗi
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                  ),
-                ),
-
               // Player
-              if (_controller != null)
+              if (_webController != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: YoutubePlayer(
-                      controller: _controller!,
-                      aspectRatio: 16 / 9,
+                    child: SizedBox(
+                      height: 220,
+                      child: WebViewWidget(controller: _webController!),
                     ),
                   ),
                 ),
