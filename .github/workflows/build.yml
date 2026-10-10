@@ -30,6 +30,17 @@ jobs:
           flutter create --project-name pain_music .
           git checkout -- lib/main.dart pubspec.yaml || true
 
+      - name: Fix AndroidManifest (thêm quyền Internet)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # Thêm quyền Internet nếu chưa có
+          if ! grep -q "android.permission.INTERNET" $MANIFEST; then
+            sed -i 's/<manifest /<manifest /' $MANIFEST
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' $MANIFEST
+          fi
+          # Cho phép cleartext (phòng trường hợp cần)
+          sed -i 's/android:name="android.app.Application"/android:name="android.app.Application" android:usesCleartextTraffic="true"/' $MANIFEST || true
+
       - name: Get dependencies
         run: flutter pub get
 
