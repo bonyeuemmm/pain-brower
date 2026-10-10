@@ -1,5 +1,5 @@
 name: pain_music
-description: App phát nhạc Youtube
+description: Pain Music - Nghe nhạc YouTube
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  youtube_player_flutter: ^8.1.2
+  youtube_player_iframe: ^5.1.2
   shared_preferences: ^2.2.3
   cupertino_icons: ^1.0.6
 
