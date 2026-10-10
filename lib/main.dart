@@ -43,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   YoutubePlayerController? _controller;
   List<String> _history = [];
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -66,36 +67,60 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
+  String? _extractVideoId(String url) {
+    // Làm sạch link
+    url = url.trim();
+
+    // Nếu người dùng chỉ dán ID
+    if (url.length == 11 && !url.contains('/') && !url.contains('?')) {
+      return url;
+    }
+
+    return YoutubePlayerController.convertUrlToId(url);
+  }
+
   void _play(String url) async {
-    final videoId = YoutubePlayerController.convertUrlToId(url);
-    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final videoId = _extractVideoId(url);
+
     if (videoId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Link YouTube không hợp lệ'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Link không hợp lệ. Hãy dán đầy đủ link YouTube';
+      });
       return;
     }
 
-    setState(() => _isLoading = true);
     await _saveHistory(url);
 
-    await _controller?.close();
-    
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: videoId,
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        mute: false,
-        loop: false,
-      ),
-    );
+    try {
+      await _controller?.close();
 
-    setState(() => _isLoading = false);
+      _controller = YoutubePlayerController.fromVideoId(
+        videoId: videoId,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showControls: true,
+          showFullscreenButton: true,
+          mute: false,
+          loop: false,
+          strictRelatedVideos: false,
+        ),
+      );
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Không thể phát video này';
+      });
+    }
   }
 
   @override
@@ -151,7 +176,7 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                         Text(
-                          'Nghe nhạc từ YouTube',
+                          'Nghe nhạc bằng link YouTube',
                           style: TextStyle(fontSize: 12, color: Colors.white54),
                         ),
                       ],
@@ -173,7 +198,7 @@ class _HomePageState extends State<HomePage> {
                     controller: _linkController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Dán link YouTube...',
+                      hintText: 'Dán link YouTube đầy đủ...',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
                       prefixIcon: const Icon(Icons.link_rounded, color: Color(0xFFBB86FC)),
                       border: InputBorder.none,
@@ -223,6 +248,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
+
+              // Thông báo lỗi
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                  ),
+                ),
 
               // Player
               if (_controller != null)
