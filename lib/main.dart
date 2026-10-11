@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -40,15 +41,25 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TextEditingController _linkController = TextEditingController();
-  InAppWebViewController? _webController;
+  final AudioPlayer _player = AudioPlayer();
+  final YoutubeExplode _yt = YoutubeExplode();
+
   List<String> _history = [];
   bool _isLoading = false;
-  String? _currentEmbedUrl;
+  String? _currentTitle;
+  String? _errorMessage;
+  bool _isPlaying = false;
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+
+    _player.playerStateStream.listen((state) {
+      setState(() {
+        _isPlaying = state.playing;
+      });
+    });
   }
 
   Future<void> _loadHistory() async {
@@ -69,55 +80,67 @@ class _HomePageState extends State<HomePage> {
 
   String? _getVideoId(String url) {
     url = url.trim();
-
-    if (RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(url)) {
-      return url;
+    try {
+      return VideoId.parseVideoId(url);
+    } catch (e) {
+      return null;
     }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return null;
-
-    if (uri.host.contains('youtu.be')) {
-      return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
-    }
-
-    if (uri.queryParameters.containsKey('v')) {
-      return uri.queryParameters['v'];
-    }
-
-    if (uri.pathSegments.contains('embed') && uri.pathSegments.length > 1) {
-      return uri.pathSegments[1];
-    }
-
-    return null;
   }
 
-  void _play(String url) async {
+  Future<void> _play(String url) async {
     final videoId = _getVideoId(url);
 
     if (videoId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Link không hợp lệ. Hãy dán đầy đủ link YouTube'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      setState(() {
+        _errorMessage = 'Link không hợp lệ';
+      });
       return;
     }
 
-    setState(() => _isLoading = true);
-    await _saveHistory(url);
-
-    final embedUrl =
-        'https://www.youtube.com/embed/$videoId?autoplay=1&rel=0&modestbranding=1&playsinline=1';
-
     setState(() {
-      _currentEmbedUrl = embedUrl;
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = null;
+      _currentTitle = null;
     });
 
-    // Load lại webview nếu đã có controller
-    _webController?.loadUrl(urlRequest: URLRequest(url: WebUri(embedUrl)));
+    try {
+      await _saveHistory(url);
+
+      // Lấy thông tin video
+      final video = await _yt.videos.get(videoId);
+      
+      // Lấy stream manifest
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      
+      // Ưu tiên lấy audio only chất lượng tốt nhất
+      final audioStream = manifest.audioOnly.withHighestBitrate();
+
+      if (audioStream == null) {
+        throw Exception('Không tìm thấy audio stream');
+      }
+
+      // Phát bằng just_audio
+      await _player.setUrl(audioStream.url.toString());
+      await _player.play();
+
+      setState(() {
+        _currentTitle = video.title;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Không lấy được nhạc.\nBạn có thể thử link khác hoặc đợi sau.';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    _yt.close();
+    _linkController.dispose();
+    super.dispose();
   }
 
   @override
@@ -188,7 +211,7 @@ class _HomePageState extends State<HomePage> {
                     controller: _linkController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Dán link YouTube đầy đủ...',
+                      hintText: 'Dán link YouTube...',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
                       prefixIcon: const Icon(Icons.link_rounded, color: Color(0xFFBB86FC)),
                       border: InputBorder.none,
@@ -239,27 +262,57 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // Player
-              if (_currentEmbedUrl != null)
+              // Thông tin đang phát
+              if (_currentTitle != null || _errorMessage != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      height: 220,
-                      child: InAppWebView(
-                        initialUrlRequest: URLRequest(url: WebUri(_currentEmbedUrl!)),
-                        initialSettings: InAppWebViewSettings(
-                          javaScriptEnabled: true,
-                          mediaPlaybackRequiresUserGesture: false,
-                          allowsInlineMediaPlayback: true,
-                          useOnLoadResource: true,
-                          transparentBackground: true,
-                        ),
-                        onWebViewCreated: (controller) {
-                          _webController = controller;
-                        },
-                      ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1229),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        if (_currentTitle != null) ...[
+                          const Text(
+                            'Đang phát',
+                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _currentTitle!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          IconButton(
+                            onPressed: () {
+                              if (_isPlaying) {
+                                _player.pause();
+                              } else {
+                                _player.play();
+                              }
+                            },
+                            icon: Icon(
+                              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                              size: 48,
+                              color: const Color(0xFF9B59B6),
+                            ),
+                          ),
+                        ],
+                        if (_errorMessage != null)
+                          Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                          ),
+                      ],
                     ),
                   ),
                 ),
