@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -40,10 +40,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TextEditingController _linkController = TextEditingController();
-  WebViewController? _webController;
+  InAppWebViewController? _webController;
   List<String> _history = [];
   bool _isLoading = false;
-  String? _currentVideoId;
+  String? _currentEmbedUrl;
 
   @override
   void initState() {
@@ -70,7 +70,6 @@ class _HomePageState extends State<HomePage> {
   String? _getVideoId(String url) {
     url = url.trim();
 
-    // Nếu chỉ dán ID 11 ký tự
     if (RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(url)) {
       return url;
     }
@@ -78,17 +77,14 @@ class _HomePageState extends State<HomePage> {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
 
-    // youtu.be/xxxxxx
     if (uri.host.contains('youtu.be')) {
       return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
     }
 
-    // youtube.com/watch?v=xxxxxx
     if (uri.queryParameters.containsKey('v')) {
       return uri.queryParameters['v'];
     }
 
-    // youtube.com/embed/xxxxxx
     if (uri.pathSegments.contains('embed') && uri.pathSegments.length > 1) {
       return uri.pathSegments[1];
     }
@@ -109,23 +105,19 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _currentVideoId = videoId;
-    });
-
+    setState(() => _isLoading = true);
     await _saveHistory(url);
 
-    final embedUrl = 'https://www.youtube.com/embed/$videoId?autoplay=1&rel=0&modestbranding=1';
-
-    _webController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF0B0715))
-      ..loadRequest(Uri.parse(embedUrl));
+    final embedUrl =
+        'https://www.youtube.com/embed/$videoId?autoplay=1&rel=0&modestbranding=1&playsinline=1';
 
     setState(() {
+      _currentEmbedUrl = embedUrl;
       _isLoading = false;
     });
+
+    // Load lại webview nếu đã có controller
+    _webController?.loadUrl(urlRequest: URLRequest(url: WebUri(embedUrl)));
   }
 
   @override
@@ -248,14 +240,26 @@ class _HomePageState extends State<HomePage> {
               ),
 
               // Player
-              if (_webController != null)
+              if (_currentEmbedUrl != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: SizedBox(
                       height: 220,
-                      child: WebViewWidget(controller: _webController!),
+                      child: InAppWebView(
+                        initialUrlRequest: URLRequest(url: WebUri(_currentEmbedUrl!)),
+                        initialSettings: InAppWebViewSettings(
+                          javaScriptEnabled: true,
+                          mediaPlaybackRequiresUserGesture: false,
+                          allowsInlineMediaPlayback: true,
+                          useOnLoadResource: true,
+                          transparentBackground: true,
+                        ),
+                        onWebViewCreated: (controller) {
+                          _webController = controller;
+                        },
+                      ),
                     ),
                   ),
                 ),
