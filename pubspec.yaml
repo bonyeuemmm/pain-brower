@@ -1,7 +1,7 @@
-name: pain_music
-description: Pain Music - Nghe nhạc bằng link YouTube
+name: pain_browser
+description: Pain Browser - Trình duyệt tím đen
 publish_to: 'none'
-version: 1.2.0+1
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,8 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  youtube_explode_dart: ^2.2.0
-  just_audio: ^0.9.40
+  webview_flutter: ^4.7.0
   shared_preferences: ^2.2.3
   cupertino_icons: ^1.0.6
 
