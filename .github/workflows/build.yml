@@ -27,18 +27,15 @@ jobs:
 
       - name: Create Flutter project
         run: |
-          flutter create --project-name pain_music .
+          flutter create --project-name pain_browser .
           git checkout -- lib/main.dart pubspec.yaml || true
 
-      - name: Fix AndroidManifest (thêm quyền Internet)
+      - name: Fix AndroidManifest
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # Thêm quyền Internet nếu chưa có
           if ! grep -q "android.permission.INTERNET" $MANIFEST; then
-            sed -i 's/<manifest /<manifest /' $MANIFEST
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET"/>' $MANIFEST
           fi
-          # Cho phép cleartext (phòng trường hợp cần)
           sed -i 's/android:name="android.app.Application"/android:name="android.app.Application" android:usesCleartextTraffic="true"/' $MANIFEST || true
 
       - name: Get dependencies
@@ -50,5 +47,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: pain-music-apk
+          name: pain-browser-apk
           path: build/app/outputs/flutter-apk/app-release.apk
